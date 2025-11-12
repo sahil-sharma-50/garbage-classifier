@@ -72,6 +72,25 @@ jobs:
               working-directory: frontend
               run: npm ci
             
-            - name: Run frontend tests
+            - name: Build frontend app
               working-directory: frontend
-              run: npm test -- --watchAll=false
+              run: npm run build
+
+            - name: Start frontend app
+              working-directory: frontend
+              run: |
+                npm start &
+                echo $! > frontend_app_pid.txt
+                # Wait for app to be ready (retry up to 10 times)
+                for i in {1..10}; do
+                  curl --fail http://localhost:3000 && break
+                  echo "Waiting for app to start..."
+                  sleep 3
+                done
+              env:
+                CI: true
+
+            - name: Stop frontend app
+              working-directory: frontend
+              if: always()
+              run: kill $(cat frontend_app_pid.txt)
