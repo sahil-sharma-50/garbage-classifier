@@ -1,0 +1,55 @@
+name: Terraform Deploy
+
+on:
+  workflow_run:
+    workflows: ["Frontend Deploy", "Backend Deploy"]
+    types:
+      - completed
+
+jobs:
+  deploy_infra:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Terraform code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.13.5
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@00943011d9042930efac3dcd3a170e4273319bc8 # v5.1.0
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
+      - name: Terraform Init
+        working-directory: infra
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: infra
+        run: terraform plan -var-file="env/dev.tfvars"
+
+      - name: Terraform Apply
+        working-directory: infra
+        run: terraform apply -var-file="env/dev.tfvars" -auto-approve
+
+      - name: Get Terraform Outputs
+        working-directory: infra
+        id: tf
+        run: |
+          echo "FRONTEND_DNS=$(terraform output -raw frontend_alb_dns)" >> $GITHUB_ENV
+          echo "BACKEND_DNS=$(terraform output -raw backend_alb_dns)" >> $GITHUB_ENV
+
+      - name: Run smoke tests
+        run: |
+          echo "Testing Frontend at $FRONTEND_DNS"
+          curl -f http://$FRONTEND_DNS || exit 1
+
+          echo "Testing Backend at $BACKEND_DNS"
+          curl -f http://$BACKEND_DNS/predict || exit 1
