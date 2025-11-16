@@ -29,7 +29,23 @@ jobs:
 
       - name: Terraform Init
         working-directory: infra
-        run: terraform init
+        run: |
+          terraform init
+          echo "Checking frontend ECS service in state..."
+          if ! terraform state show module.frontend.aws_ecs_service.service > /dev/null 2>&1; then
+            echo "Importing frontend ECS service..."
+            terraform import module.frontend.aws_ecs_service.service "${{ secrets.FRONTEND_SERVICE_ARN }}"
+          else
+            echo "Frontend ECS service already imported."
+          fi
+
+          echo "Checking backend ECS service in state..."
+          if ! terraform state show module.backend.aws_ecs_service.service > /dev/null 2>&1; then
+            echo "Importing backend ECS service..."
+            terraform import module.backend.aws_ecs_service.service "${{ secrets.BACKEND_SERVICE_ARN }}"
+          else
+            echo "Backend ECS service already imported."
+          fi
 
       - name: Terraform Plan
         working-directory: infra
